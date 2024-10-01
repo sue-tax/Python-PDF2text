@@ -1,11 +1,10 @@
 """
 PDFをテキストに変換する 縦書用
-pdf_PDF2textがオリジナル
 pdfminerを使用
+
+オリジナル　https://github.com/juu7g/Python-PDF2text
 """
 
-# python pdf_PDF2textV.py -v 408 -t 750 官報 １枚.pdf
-# python pdf_PDF2textV.py -v 406 新旧対照表１枚.pdf
 
 from pdfminer.high_level import extract_pages
 from pdfminer.layout import LAParams, LTTextBox
@@ -166,7 +165,7 @@ class ConvertPDF2textV():
                     if element.y0 > self.header: continue  # ヘッダー位置の文字は抽出しない
                     _text =element.get_text()
                     # debug
-                    print("y1:{}, y0:{}■{}".format(element.y1, element.y0, _text))
+                    # print("y1:{}, y0:{}■{}".format(element.y1, element.y0, _text))
 
                     # if element.x1 < self.border:
                     #     # 文字列全体が左側
