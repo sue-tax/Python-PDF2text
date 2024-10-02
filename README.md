@@ -8,6 +8,9 @@ pdf_PDF2textV.py は、pdf_PDF2text.py を縦書きのPDFファイル用に改�
 ## 使い方
 
 ```dosbatch
+python pdf_PDF2textV.py [-h] [-v n] [-f n] [-t n] [-s n] [-e n]
+                        input_path [output_path]
+
 positional arguments:
   input_path        入力ファイル名
   output_path       出力ファイル名(default:月日_時分_秒.txt)
