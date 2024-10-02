@@ -1,11 +1,14 @@
 # Python-PDF2text
 
-## 概要
+## pdf_PDF2textV
+
+### 概要
 
 pdf_PDF2textV.py は、pdf_PDF2text.py を縦書きのPDFファイル用に改良したものです。
+
 ２段組みの文書でも抽出できます。
 
-## 使い方
+### 使い方
 
 ```dosbatch
 python pdf_PDF2textV.py [-h] [-v n] [-f n] [-t n] [-s n] [-e n]
