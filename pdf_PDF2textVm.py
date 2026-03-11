@@ -1,0 +1,169 @@
+"""
+PDFをテキストに変換する 縦書用
+複数ページを上下別々のテキストファイルに出力する
+pdfminerを使用
+
+オリジナル　https://github.com/juu7g/Python-PDF2text
+"""
+
+
+from pdfminer.high_level import extract_pages
+from pdfminer.layout import LAParams, LTTextBox
+import collections
+import os, sys, argparse
+
+class ConvertPDF2textVm():
+    """
+    PDFをtxtに変換する。
+    PDFは縦の2段組み
+    複数ページを上下別々のテキストファイルに出力する
+    """
+
+    def __init__(self, argv:list):
+        """
+        コンストラクタ
+
+        Args:
+            argv:   以下
+                    入力ファイル名
+                    出力ファイル名   拡張子はtxtとする
+                    段組みの切れ目   左右の段落の切れ目となる位置    0の場合、罫線情報から計算する
+                                    default:1
+                    フッター位置     フッターの開始位置     これ以下の文字を変換しない
+                                    上記が0の場合、罫線情報から計算する
+                    ヘッダー位置     ヘッダーの終了位置     これより上の文字を変換しない
+                    開始ページ(1スタート)
+                    終了ページ(1スタート)
+        """
+        self.input_path = r'xxxxx.pdf'
+        self.borderY = 0     # 段組みの切れ目のx座標 0の時ページの真ん中に設定
+        self.footer = 60    # フッターのy座標。ページの最下部が0。これより下の位置の文字は抽出しない
+        self.header = 1000  # ヘッダーのy座標。 これより上の位置の文字は抽出しない
+        self.start_page = 1 # 開始ページ1スタート
+        self.last_page = 0  # 終了ページ1スタート
+
+        if not argv: return
+
+        # コマンドライン引数の解析
+        parser = argparse.ArgumentParser()		# インスタンス作成
+        parser.add_argument('input_path', type=str, help="入力ファイル名")	# 引数定義
+        parser.add_argument("-u", '--up', default="_u", type=str, help="上部の出力ファイルの接尾辞(default:_u)")
+        parser.add_argument("-d", '--down', default="_d", type=str, help="上部の出力ファイルの接尾辞(default:_d)")
+        parser.add_argument("-v", '--vertical', type=int, metavar="n", default=0, help="段組みの切れ目  0の場合、用紙高さの半分(default:%(default)s)")    # 引数定義
+        parser.add_argument("-f", '--footer', type=int, metavar="n", default=30, help="フッター位置(default:%(default)s)")	# 引数定義
+        parser.add_argument("-t", '--top', type=int, metavar="n", default=1000, help="ヘッダー位置(default:%(default)s)")	# 引数定義
+        parser.add_argument("-s",'--s_page', type=int, metavar="n", default=1, help="開始ページ(default:%(default)s)")	# 引数定義
+        parser.add_argument("-e",'--e_page', type=int, metavar="n", default=0, help="終了ページ(0:最終)(default:%(default)s)")	# 引数定義
+                
+        args = parser.parse_args(argv)				# 引数の解析
+        print(args)						# 引数の参照
+        self.input_path = args.input_path
+        self.start_page = args.s_page
+        self.last_page = args.e_page
+
+        other_ext_filepath = os.path.splitext(self.input_path)
+        self.output_path_u = other_ext_filepath[0] + args.up + ".txt"
+        self.output_path_d = other_ext_filepath[0] + args.down + ".txt"
+        
+        self.borderY = args.vertical
+        self.footer = args.footer
+        self.header = args.top
+
+    def flatten(self, l):
+        """
+        ツリー状になっているイテレータをフラットに返すイテレータ
+        """
+        for el in l:
+            if isinstance(el, collections.abc.Iterable) and not isinstance(el, (str, bytes)):
+                yield from self.flatten(el)
+            else:
+                yield el
+
+    def flatten_lttext(self, l, _type):
+        """
+        ツリー状になっているイテレータをフラットに返すイテレータ
+        返る要素の型を指定
+        pdfminerのextract_pagesで使用するのを想定
+        要素の型が引数で指定した型を継承したもののみを返す
+
+        Args:
+            l:      pdfminerのextract_pages()の戻り値
+            _type:  戻したい値の型
+        """
+        for el in l:
+            if isinstance(el, (_type)):
+                yield el
+            else:
+                if isinstance(el, collections.abc.Iterable) and not isinstance(el, (str, bytes)):
+                    yield from self.flatten_lttext(el, _type)
+                else:
+                    continue
+
+    def convert_pdf_to_text(self):
+        """
+        PDFファイルをテキストに変換
+        PDFは2段に段組みされたものも含む
+        """
+
+        laparams = LAParams(detect_vertical=True)  # パラメータインスタンス
+        laparams.boxes_flow = None          # -1.0（水平位置のみが重要）から+1.0（垂直位置のみが重要）default 0.5
+        laparams.word_margin = 0.2          # default 0.1
+        laparams.char_margin = 2.0          # default 2.0
+        laparams.line_margin = 0            # default 0.5
+
+        # 初期化
+        self.text_t = ""        # 上側の文字列
+        self.text_b = ""        # 下側の文字列
+        
+        print("Analyzing from {} page to {} page(0:to last)".format(self.start_page, self.last_page))
+        
+        # 対象ページを読み、テキスト抽出する。（maxpages：0は全ページ）
+        for page_layout in extract_pages(self.input_path, maxpages=0, laparams=laparams):    # ファイルにwithしている
+            # 抽出するページの選別。extract_pagesの引数では、開始ページだけの指定に対応できないため
+            if page_layout.pageid < self.start_page: continue                   # 指定開始ページより前は飛ばす
+            if self.last_page and self.last_page < page_layout.pageid: break    # 指定終了ページ以降は中断
+            # ページの高さから段組みの境界を計算(用紙高さの半分とする)
+            if self.borderY == 0:
+                self.borderY = int(page_layout.height / 2)
+            if page_layout.pageid == self.start_page:
+                print("Check on page #{}".format(page_layout.pageid))
+                print("Page Info width:{}, heght:{}".format(page_layout.width, page_layout.height))
+                print("Calc result borderY: {}, footer: {}".format(self.borderY, self.footer))
+            # 要素の出現順の確認(debug)
+            # for element in self.flatten_lttext(page_layout, LTTextBox):
+            #     print("bbox{} {}".format(element.bbox, element.get_text()[:20]))
+            
+            # 要素のイテレータをたどり入れ子の要素を1次元に取り出す。戻るイテレータはLTTextBox型のみ
+            # 要素の行の上側y1で降順、行の左側x0で昇順にソートする。
+            # for element in sorted(self.flatten_lttext(page_layout, LTTextBox), key=lambda x: (-x.y1, x.x0)):
+            for element in sorted(
+                    self.flatten_lttext(page_layout, LTTextBox),
+                    key=lambda y: (-y.x1, y.x0)):
+            # for element in self.flatten_lttext(page_layout, LTTextBox):
+                if element.y1 < self.footer: continue  # フッター位置の文字は抽出しない
+                if element.y0 > self.header: continue  # ヘッダー位置の文字は抽出しない
+                _text =element.get_text()
+                # debug
+                # print("y1:{}, y0:{}■{}".format(element.y1, element.y0, _text))
+
+                if element.y0 > self.borderY:
+                    # 文字列全体が上側
+                    self.text_t += _text
+                else:
+                    if element.y1 <= self.borderY:
+                        # 文字列全体が下側
+                        self.text_b += _text
+                    else:
+                        # 文字列が境界をまたいでいる場合
+                        self.text_t += _text
+                # print("上:"+self.text_t)
+                # print("下:"+self.text_b)
+        # 出力ファイルのオープン    ファイルがある時は上書きされる
+        with open(self.output_path_u, "w", encoding="utf-8") as f:
+            f.write(self.text_t)
+        with open(self.output_path_d, "w", encoding="utf-8") as f:
+            f.write(self.text_b)
+
+if __name__ == "__main__":
+    cnv = ConvertPDF2textVm(sys.argv[1:])
+    cnv.convert_pdf_to_text()
